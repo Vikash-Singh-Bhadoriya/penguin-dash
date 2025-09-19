@@ -4,8 +4,8 @@ const ctx = canvas.getContext('2d');
 // Penguin properties
 const penguin = {
   x: 50,
-  y: canvas.height - 50,
-  size: 40,
+  y: canvas.height - 64,
+  size: 64,
   color: '#111',
   vy: 0,
   jumpPower: -13,
@@ -13,18 +13,66 @@ const penguin = {
   onGround: true
 };
 
+// Penguin animation frames
+const penguinFrames = {
+  walk: [
+    'res/Penguin-images-2/Animations/penguin_walk01@2x.png',
+    'res/Penguin-images-2/Animations/penguin_walk02@2x.png',
+    'res/Penguin-images-2/Animations/penguin_walk03@2x.png',
+    'res/Penguin-images-2/Animations/penguin_walk04@2x.png',
+  ],
+  jump: [
+    'res/Penguin-images-2/Animations/penguin_jump01@2x.png',
+    'res/Penguin-images-2/Animations/penguin_jump02@2x.png',
+    'res/Penguin-images-2/Animations/penguin_jump03@2x.png',
+  ],
+  die: [
+    'res/Penguin-images-2/Animations/penguin_die01@2x.png',
+    'res/Penguin-images-2/Animations/penguin_die02@2x.png',
+    'res/Penguin-images-2/Animations/penguin_die03@2x.png',
+    'res/Penguin-images-2/Animations/penguin_die04@2x.png',
+  ]
+};
+
+// Preload penguin images
+const penguinImages = {};
+for (const key in penguinFrames) {
+  penguinImages[key] = penguinFrames[key].map(src => {
+    const img = new Image();
+    img.src = src;
+    return img;
+  });
+}
+
 // Penguin animation state
-let penguinAnim = { wing: 0, wingDir: 1, eye: 0, eyeTimer: 0 };
+let penguinAnim = {
+  state: 'walk', // walk, jump, die
+  frame: 0,
+  timer: 0
+};
 
 // Obstacle properties
 // Obstacle types (fix: add this definition)
 const OBSTACLE_TYPES = ['iceTall', 'iceShort', 'snowball', 'slidingIce'];
+
+// Calculate max jump height for penguin
+const maxJumpHeight = (penguin.jumpPower * penguin.jumpPower) / (2 * penguin.gravity);
+
 function createObstacle() {
   const type = OBSTACLE_TYPES[Math.floor(Math.random()*OBSTACLE_TYPES.length)];
-  let width = 30, height = 50, y = canvas.height - 50, extra = {};
-  if (type === 'iceShort') { height = 30; y = canvas.height - 30; }
-  if (type === 'snowball') { width = 32; height = 32; y = canvas.height - 32; extra.angle = 0; }
-  if (type === 'slidingIce') { height = 40; y = canvas.height - 80; extra.baseY = y; extra.dir = Math.random()<0.5?-1:1; }
+  let width = 45, height = 75, y = canvas.height - 75, extra = {};
+  if (type === 'iceShort') { height = 45; y = canvas.height - 45; }
+  if (type === 'snowball') { width = 48; height = 48; y = canvas.height - 48; extra.angle = 0; }
+  if (type === 'slidingIce') { 
+    height = 60; 
+    // Position sliding ice so penguin can always jump over it
+    // Never place it at ground level (where penguin walks)
+    let maxY = canvas.height - maxJumpHeight - height - 30;
+    let minY = canvas.height - height - 50; // Keep above ground level
+    extra.baseY = minY + Math.random() * (maxY - minY);
+    y = extra.baseY;
+    extra.dir = Math.random()<0.5?-1:1;
+  }
   return {
     type,
     width,
@@ -80,63 +128,11 @@ function isColliding(a, b) {
   );
 }
 
-// Draw penguin with animation
-function drawPenguin(x, y, size, anim) {
-  ctx.save();
-  ctx.translate(x + size/2, y + size/2);
-  ctx.scale(size/40, size/40);
-  // Body (black)
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 18, 20, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#222';
-  ctx.fill();
-  // Belly (white)
-  ctx.beginPath();
-  ctx.ellipse(0, 4, 11, 13, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-  // Left wing (flap)
-  ctx.save();
-  ctx.rotate(-0.3 - anim.wing*0.15);
-  ctx.beginPath();
-  ctx.ellipse(-15, 0, 5, 13, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#111';
-  ctx.fill();
-  ctx.restore();
-  // Right wing (flap)
-  ctx.save();
-  ctx.rotate(0.3 + anim.wing*0.15);
-  ctx.beginPath();
-  ctx.ellipse(15, 0, 5, 13, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#111';
-  ctx.fill();
-  ctx.restore();
-  // Beak
-  ctx.beginPath();
-  ctx.moveTo(0, -7);
-  ctx.lineTo(0, -15);
-  ctx.lineTo(5, -10);
-  ctx.closePath();
-  ctx.fillStyle = '#ffb347';
-  ctx.fill();
-  // Feet
-  ctx.beginPath();
-  ctx.ellipse(-6, 20, 4, 2, 0, 0, Math.PI*2);
-  ctx.ellipse(6, 20, 4, 2, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#ffb347';
-  ctx.fill();
-  // Eyes (blink)
-  ctx.beginPath();
-  ctx.arc(-5, -5, 2, 0, Math.PI*2);
-  ctx.arc(5, -5, 2, 0, Math.PI*2);
-  ctx.fillStyle = anim.eye ? '#222' : '#fff';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(-5, -5, 1, 0, Math.PI*2);
-  ctx.arc(5, -5, 1, 0, Math.PI*2);
-  ctx.fillStyle = '#222';
-  ctx.fill();
-  ctx.restore();
+function drawPenguinSprite(x, y, size, anim) {
+  let arr = penguinImages[anim.state];
+  let frame = Math.floor(anim.frame) % arr.length;
+  let img = arr[frame];
+  ctx.drawImage(img, x, y, size, size);
 }
 
 // Draw obstacles with animation
@@ -200,17 +196,23 @@ function gameLoop(timestamp) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Animate penguin
-  penguinAnim.wing += penguinAnim.wingDir * 0.12;
-  if (penguinAnim.wing > 1) { penguinAnim.wing = 1; penguinAnim.wingDir = -1; }
-  if (penguinAnim.wing < 0) { penguinAnim.wing = 0; penguinAnim.wingDir = 1; }
-  penguinAnim.eyeTimer -= 1;
-  if (penguinAnim.eyeTimer < 0) {
-    penguinAnim.eye = Math.random() < 0.1 ? 1 : 0;
-    penguinAnim.eyeTimer = 20 + Math.random()*40;
+  if (gameOver) {
+    penguinAnim.state = 'die';
+    penguinAnim.timer += 1;
+    if (penguinAnim.timer > 6) {
+      penguinAnim.frame += 0.15;
+    }
+  } else if (!penguin.onGround) {
+    penguinAnim.state = 'jump';
+    penguinAnim.frame += 0.15;
+  } else {
+    penguinAnim.state = 'walk';
+    penguinAnim.frame += 0.18;
   }
+  if (penguinAnim.frame >= penguinImages[penguinAnim.state].length) penguinAnim.frame = 0;
 
   // Draw penguin
-  drawPenguin(penguin.x, penguin.y, penguin.size, penguinAnim);
+  drawPenguinSprite(penguin.x, penguin.y, penguin.size, penguinAnim);
 
   // Draw obstacles
   for (let obs of obstacles) {
@@ -263,7 +265,7 @@ function gameLoop(timestamp) {
   if (!gameOver && timestamp > nextObstacleTime) {
     // Ensure minimum distance from last obstacle
     let last = obstacles.length ? obstacles[obstacles.length - 1] : null;
-    let minGap = 120 + Math.random() * 80 + (baseSpeed-6)*10; // scale gap with speed
+    let minGap = 200 + Math.random() * 100 + (baseSpeed-6)*15; // larger gaps for platform jumping
     if (!last || (last.x + last.width < canvas.width - minGap)) {
       obstacles.push(createObstacle()); // no speed argument
       // Next spawn in 0.8-1.7s
